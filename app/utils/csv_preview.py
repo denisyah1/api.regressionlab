@@ -1,4 +1,4 @@
-from urllib import response
+import io
 import pandas as pd
 from fastapi import HTTPException
 from app.utils.json_sanitizer import sanitize
@@ -8,9 +8,10 @@ def analyze_csv(file, preview_rows: int = 5):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
     try:
-        df = pd.read_csv(file.file)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid CSV format")
+        contents = file.file.read()
+        df = pd.read_csv(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(e)}")
 
     if df.empty:
         raise HTTPException(status_code=400, detail="CSV file is empty")
