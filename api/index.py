@@ -1,13 +1,14 @@
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import StreamingResponse
 import os
+import io
+import pickle
 from app.utils.csv_preview import analyze_csv
-from app.services.regression_service import run_regression
-from app.services.plot_store import PLOT_STORE
-from fastapi import HTTPException
+from app.services.regression_service import run_regression, run_regression_and_get_model
 from app.utils.csv_loader import load_csv
 from app.utils.eda_analyzer import analyze_eda
 from fastapi.middleware.cors import CORSMiddleware
+from app.utils.recommendation_engine import recommend_regression_columns
 
 app = FastAPI(title="Regression Visualization API")
 
@@ -54,53 +55,51 @@ async def regression(
         feature_columns=features,
         null_strategy=null_strategy
     )
-#==========================
-# GET PLOT
-#==========================
 
-from app.services.plot_store import PLOT_STORE
-from fastapi import HTTPException
-
-@app.get("/api/regression/plot")
-def get_regression_plot():
-    if "last" not in PLOT_STORE:
-        raise HTTPException(
-            status_code=404,
-            detail="No regression plot data available. Run regression first."
-        )
-
-    return PLOT_STORE["last"]
+# NOTE: GET /api/regression/plot has been removed.
+# Plot data is now returned directly inside POST /api/regression
+# under the "plot_data" key. Update your frontend to read it from there.
 
 # =========================
 # DOWNLOAD SAVED MODEL
 # =========================
-@app.get("/api/model/download")
-async def download_model(filename: str):
-    path = f"models/saved/{filename}"
-
-    if not os.path.exists(path):
-        return {"error": "Model not found"}
-
-    return FileResponse(
-        path,
+# Changed from GET to POST — the model is no longer saved to disk.
+# We re-run regression with the same CSV and stream the result directly.
+@app.post("/api/model/download")
+async def download_model(
+    file: UploadFile = File(...),
+    target_column: str = Form(...),
+    feature_columns: str = Form(...),
+    null_strategy: str = Form("auto")
+):
+    features = [c.strip() for c in feature_columns.split(",") if c.strip()]
+    model, model_name = run_regression_and_get_model(
+        file=file,
+        target_column=target_column,
+        feature_columns=features,
+        null_strategy=null_strategy
+    )
+    # Serialize model into memory buffer — no disk writes at all
+    buffer = io.BytesIO()
+    pickle.dump(model, buffer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
         media_type="application/octet-stream",
-        filename=filename
+        headers={"Content-Disposition": f"attachment; filename={model_name}.pkl"}
     )
 
 # =========================
 # EDA ANALYSIS
 # =========================
-
 @app.post("/api/csv/eda")
 async def csv_eda(file: UploadFile = File(...)):
     df = load_csv(file)
     return analyze_eda(df)
 
-#==========================
-# regression recommendation
-#==========================
-from app.utils.recommendation_engine import recommend_regression_columns
-
+# ==========================
+# REGRESSION RECOMMENDATION
+# ==========================
 @app.post("/api/csv/recommendation")
 async def csv_recommendation(file: UploadFile = File(...)):
     df = load_csv(file)
