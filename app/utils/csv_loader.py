@@ -7,11 +7,18 @@ def load_csv(file):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
     try:
-        # Read raw bytes first, then wrap in BytesIO.
-        # Directly passing file.file to pandas fails on Vercel serverless
-        # because the stream may not be seekable after upload handling.
         contents = file.file.read()
-        df = pd.read_csv(io.BytesIO(contents))
+        # Try common encodings in order — Excel CSVs are often latin-1 or cp1252
+        for encoding in ["utf-8", "latin-1", "cp1252", "utf-8-sig"]:
+            try:
+                df = pd.read_csv(io.BytesIO(contents), encoding=encoding)
+                break
+            except (UnicodeDecodeError, Exception):
+                continue
+        else:
+            raise HTTPException(status_code=400, detail="Could not decode CSV file. Please save it as UTF-8.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(e)}")
 

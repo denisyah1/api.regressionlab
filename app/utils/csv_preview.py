@@ -9,7 +9,17 @@ def analyze_csv(file, preview_rows: int = 5):
 
     try:
         contents = file.file.read()
-        df = pd.read_csv(io.BytesIO(contents))
+        # Try common encodings in order — Excel CSVs are often latin-1 or cp1252
+        for encoding in ["utf-8", "latin-1", "cp1252", "utf-8-sig"]:
+            try:
+                df = pd.read_csv(io.BytesIO(contents), encoding=encoding)
+                break
+            except (UnicodeDecodeError, Exception):
+                continue
+        else:
+            raise HTTPException(status_code=400, detail="Could not decode CSV file. Please save it as UTF-8.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(e)}")
 
