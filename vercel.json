@@ -12,6 +12,6 @@
     }
   ],
   "env": {
-    "CORS_ORIGINS" : "https://regressionlab-denisyahcodes-projects.vercel.app/"
+    "CORS_ORIGINS" : "https://regressionlab-denisyahcodes-projects.vercel.app"
   }
 }
