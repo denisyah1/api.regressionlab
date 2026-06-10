@@ -10,5 +10,8 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ]
+  ],
+  "env": {
+    "CORS_ORIGINS" : "https://regressionlab-denisyahcodes-projects.vercel.app/"
+  }
 }
